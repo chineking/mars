@@ -34,9 +34,6 @@ class DataFrame(_Frame):
         if isinstance(data, DATAFRAME_TYPE):
             raise NotImplementedError('Not support yet')
 
-        if cudf is not None and isinstance(data, cudf.DataFrame):
-            df = from_cudf(data)
-        else:
-            pdf = pd.DataFrame(data, index=index, columns=columns, dtype=dtype, copy=copy)
-            df = from_pandas(pdf, chunk_size=chunk_size, gpu=gpu, sparse=sparse)
+        pdf = pd.DataFrame(data, index=index, columns=columns, dtype=dtype, copy=copy)
+        df = from_pandas(pdf, chunk_size=chunk_size, gpu=gpu, sparse=sparse)
         super(DataFrame, self).__init__(df.data)

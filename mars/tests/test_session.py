@@ -175,10 +175,10 @@ class Test(unittest.TestCase):
 
     @unittest.skipIf(cudf is None, 'cudf not installed')
     def testDataFrameFromCudfExecuteNotFetch(self):
-        data1 = cudf.DataFrame.from_pandas(pd.DataFrame(np.random.random((5, 4)), columns=list('abcd')))
+        data1 = pd.DataFrame(np.random.random((5, 4)), columns=list('abcd'))
         sess = Session.default_or_local()
 
-        df1 = md.DataFrame(data1, chunk_size=2)
+        df1 = md.DataFrame(data1, gpu=True, chunk_size=2)
 
         with self.assertRaises(ValueError):
             sess.fetch(df1)

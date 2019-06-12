@@ -90,9 +90,3 @@ def from_pandas(data, chunk_size=None, gpu=None, sparse=False):
     op = DataFrameDataSource(data=data, gpu=gpu, sparse=sparse)
     return op(data.shape, chunk_size=chunk_size)
 
-
-def from_cudf(data, chunk_size=None, gpu=None, sparse=False):
-    if gpu is None:
-        gpu = True
-    op = DataFrameDataSource(data=data, gpu=gpu, sparse=sparse)
-    return op(data.shape, chunk_size=chunk_size)
