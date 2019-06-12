@@ -13,10 +13,14 @@
 # limitations under the License.
 
 from ..expressions.datasource.dataframe import DataFrameDataSource
+from ..utils import convert_to_cudf_df
 
 
 def _dataframe_pandas_data_source(ctx, chunk):
-    ctx[chunk.key] = chunk.op.data
+    df = chunk.op.data
+    if chunk.op.gpu:
+        df = convert_to_cudf_df(df)
+    ctx[chunk.key] = df
 
 
 def register_data_source_handler():

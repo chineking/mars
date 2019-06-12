@@ -19,10 +19,14 @@ try:
     import pandas as pd
 except ImportError:  # pragma: no cover
     pd = None
+try:
+    import cudf
+except ImportError:  # pragma: no cover
+    cudf = None
 
 from mars.executor import Executor
 from mars.tests.core import TestBase
-from mars.dataframe.expressions.datasource.dataframe import from_pandas
+from mars.dataframe.expressions.datasource.dataframe import from_pandas, from_cudf
 
 
 @unittest.skipIf(pd is None, 'pandas not installed')
@@ -37,3 +41,12 @@ class Test(TestBase):
 
         result = self.executor.execute_dataframe(df, concat=True)[0]
         pd.testing.assert_frame_equal(pdf, result)
+
+    @unittest.skipIf(cudf is None, 'cudf not installed')
+    def testCudfExecution(self):
+        pdf = pd.DataFrame(np.random.rand(20, 30))
+        cdf = cudf.DataFrame.from_pandas(pdf)
+        df = from_cudf(cdf, chunk_size=(13, 21))
+
+        result = self.executor.execute_dataframe(df, concat=True)[0]
+        pd.testing.assert_frame_equal(pdf, result.to_pandas())

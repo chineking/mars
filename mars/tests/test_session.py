@@ -21,6 +21,10 @@ try:
     import pandas as pd
 except ImportError:  # pragma: no cover
     pd = None
+try:
+    import cudf
+except ImportError:  # pragma: no cover
+    cudf = None
 
 import mars.tensor as mt
 import mars.dataframe as md
@@ -168,6 +172,27 @@ class Test(unittest.TestCase):
         expected.iloc[:2, :2] = data1.iloc[:2, :2] * 3
 
         pd.testing.assert_frame_equal(df1.execute(), expected)
+
+    @unittest.skipIf(cudf is None, 'cudf not installed')
+    def testDataFrameFromCudfExecuteNotFetch(self):
+        data1 = cudf.DataFrame.from_pandas(pd.DataFrame(np.random.random((5, 4)), columns=list('abcd')))
+        sess = Session.default_or_local()
+
+        df1 = md.DataFrame(data1, chunk_size=2)
+
+        with self.assertRaises(ValueError):
+            sess.fetch(df1)
+
+        self.assertIsNone(df1.execute(fetch=False))
+
+        # modify result
+        executor = sess._sess._executor
+        executor.chunk_result[df1.chunks[0].key] = data1.iloc[:2, :2] * 3
+
+        expected = data1.to_pandas()
+        expected.iloc[:2, :2] = data1.iloc[:2, :2] * 3
+
+        pd.testing.assert_frame_equal(df1.execute().to_pandas(), expected)
 
     def testClosedSession(self):
         session = new_session()

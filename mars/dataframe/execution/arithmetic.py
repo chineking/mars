@@ -112,9 +112,11 @@ def _add(ctx, chunk):
     ctx[chunk.key] = left.add(right, axis=chunk.op.axis,
                               level=chunk.op.level, fill_value=chunk.op.fill_value)
 
+
 def _abs(ctx, chunk):
     df = ctx[chunk.inputs[0].key]
     ctx[chunk.key] = df.abs()
+
 
 def register_arithmetic_handler():
     from ...executor import register

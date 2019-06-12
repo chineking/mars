@@ -19,6 +19,7 @@ from ....serialize import DataFrameField, SeriesField
 from ....config import options
 from ....compat import izip
 from ....tensor.expressions.utils import get_chunk_slices
+from ...utils import convert_to_pandas_df
 from ..utils import decide_chunk_sizes, parse_index
 from ..core import DataFrameOperand, DataFrameOperandMixin
 
@@ -30,7 +31,7 @@ class DataFrameDataSource(DataFrameOperand, DataFrameOperandMixin):
 
     _op_type_ = OperandDef.DATAFRAME_DATA_SOURCE
 
-    _data = DataFrameField('data')
+    _data = DataFrameField('data', on_serialize=convert_to_pandas_df)
     _dtypes = SeriesField('dtypes')
 
     def __init__(self, data=None, dtypes=None, gpu=None, sparse=None, **kw):
@@ -86,5 +87,12 @@ class DataFrameDataSource(DataFrameOperand, DataFrameOperandMixin):
 
 
 def from_pandas(data, chunk_size=None, gpu=None, sparse=False):
+    op = DataFrameDataSource(data=data, gpu=gpu, sparse=sparse)
+    return op(data.shape, chunk_size=chunk_size)
+
+
+def from_cudf(data, chunk_size=None, gpu=None, sparse=False):
+    if gpu is None:
+        gpu = True
     op = DataFrameDataSource(data=data, gpu=gpu, sparse=sparse)
     return op(data.shape, chunk_size=chunk_size)

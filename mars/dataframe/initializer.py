@@ -16,10 +16,14 @@ try:
     import pandas as pd
 except ImportError:  # pragma: no cover
     pass
+try:
+    import cudf
+except ImportError:  # pragma: no cover
+    cudf = None
 
 from ..tensor.core import TENSOR_TYPE
 from .core import DATAFRAME_TYPE, DataFrame as _Frame
-from .expressions.datasource.dataframe import from_pandas
+from .expressions.datasource.dataframe import from_pandas, from_cudf
 
 
 class DataFrame(_Frame):
@@ -30,6 +34,9 @@ class DataFrame(_Frame):
         if isinstance(data, DATAFRAME_TYPE):
             raise NotImplementedError('Not support yet')
 
-        pdf = pd.DataFrame(data, index=index, columns=columns, dtype=dtype, copy=copy)
-        df = from_pandas(pdf, chunk_size=chunk_size, gpu=gpu, sparse=sparse)
+        if cudf is not None and isinstance(data, cudf.DataFrame):
+            df = from_cudf(data)
+        else:
+            pdf = pd.DataFrame(data, index=index, columns=columns, dtype=dtype, copy=copy)
+            df = from_pandas(pdf, chunk_size=chunk_size, gpu=gpu, sparse=sparse)
         super(DataFrame, self).__init__(df.data)

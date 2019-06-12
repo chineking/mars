@@ -15,7 +15,16 @@
 import functools
 import operator
 
-from mars.lib.mmh3 import hash as mmh_hash
+try:
+    import pandas as pd
+except ImportError:  # pragma: no cover
+    pd = None
+try:
+    import cudf
+except ImportError:
+    cudf = None
+
+from ..lib.mmh3 import hash as mmh_hash
 
 
 def hash_index(index, size):
@@ -31,3 +40,27 @@ def hash_index(index, size):
 def hash_dtypes(dtypes, size):
     hashed_indexes = hash_index(dtypes.index, size)
     return [dtypes[index] for index in hashed_indexes]
+
+
+def convert_to_pandas_df(df):
+    if pd is None:
+        raise TypeError('Cannot convert to pandas DataFrame because pandas not installed')
+
+    if isinstance(df, pd.DataFrame):
+        return df
+    if cudf and isinstance(df, cudf.DataFrame):
+        return df.to_pandas()
+
+    raise TypeError('Unknown dataframe type: {0}'.format(type(df)))
+
+
+def convert_to_cudf_df(df):
+    if cudf is None:
+        raise TypeError('Cannot convert to cudf DataFrame because cudf not installed')
+
+    if isinstance(df, cudf.DataFrame):
+        return df
+    if isinstance(df, pd.DataFrame):
+        return cudf.DataFrame.from_pandas(df)
+
+    raise TypeError('Unknown dataframe type: {0}'.format(type(df)))
