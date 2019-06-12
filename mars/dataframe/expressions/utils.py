@@ -143,7 +143,7 @@ def parse_index(index_value, store_data=False, key=None):
         kw['_sortorder'] = index.sortorder
         return IndexValue.MultiIndex(_names=index.names, **kw)
 
-    if cudf is not None and isinstance(index_value, cudf.DataFrame.Index):
+    if cudf is not None and isinstance(index_value, cudf.dataframe.Index):
         # just convert cudf index to pandas one
         index_value = index_value.to_pandas()
 
