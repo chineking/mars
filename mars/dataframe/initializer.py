@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover
 
 from ..tensor.core import TENSOR_TYPE
 from .core import DATAFRAME_TYPE, DataFrame as _Frame
-from .expressions.datasource.dataframe import from_pandas, from_cudf
+from .expressions.datasource.dataframe import from_pandas
 
 
 class DataFrame(_Frame):
