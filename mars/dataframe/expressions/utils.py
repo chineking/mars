@@ -20,6 +20,10 @@ try:
     import pandas as pd
 except ImportError:  # pragma: no cover
     pass
+try:
+    import cudf
+except ImportError:  # pragma: no cover
+    cudf = None
 
 from ...tensor.expressions.utils import dictify_chunk_size, normalize_chunk_sizes
 from ...utils import tokenize
@@ -98,8 +102,6 @@ def decide_chunk_sizes(shape, chunk_size, memory_usage):
 
 
 def parse_index(index_value, store_data=False, key=None):
-    import pandas as pd
-
     def _extract_property(index, ret_data):
         kw = {
             '_is_monotonic_increasing': index.is_monotonic_increasing,
@@ -140,6 +142,10 @@ def parse_index(index_value, store_data=False, key=None):
         kw = _extract_property(index, store_data)
         kw['_sortorder'] = index.sortorder
         return IndexValue.MultiIndex(_names=index.names, **kw)
+
+    if cudf is not None and isinstance(index_value, cudf.DataFrame.Index):
+        # just convert cudf index to pandas one
+        index_value = index_value.to_pandas()
 
     if isinstance(index_value, pd.RangeIndex):
         return IndexValue(_index_value=_serialize_range_index(index_value))
