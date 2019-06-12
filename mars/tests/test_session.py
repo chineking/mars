@@ -187,7 +187,8 @@ class Test(unittest.TestCase):
 
         # modify result
         executor = sess._sess._executor
-        executor.chunk_result[df1.chunks[0].key] = data1.iloc[:2, :2] * 3
+        executor.chunk_result[df1.chunks[0].key] = \
+            cudf.DataFrame.from_pandas(data1).iloc[:2, :2] * 3
 
         expected = data1.to_pandas()
         expected.iloc[:2, :2] = data1.iloc[:2, :2] * 3
