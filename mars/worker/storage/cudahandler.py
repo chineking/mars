@@ -19,7 +19,7 @@ import pandas as pd
 
 from ...errors import StorageFull
 from ...serialize import dataserializer
-from ...utils import calc_data_size, lazy_import
+from ...utils import calc_data_size, lazy_import, get_extra_meta
 from .core import StorageHandler, DataStorageDevice, ObjectStorageMixin, \
     SpillableStorageMixin, wrap_promised, register_storage_handler_cls
 
@@ -84,24 +84,28 @@ class CudaHandler(StorageHandler, ObjectStorageMixin, SpillableStorageMixin):
         return objs
 
     @wrap_promised
-    def put_objects(self, session_id, data_keys, objs, sizes=None, shapes=None,
+    def put_objects(self, session_id, data_keys, objs,
+                    sizes=None, shapes=None, extras=None,
                     serialize=False, pin_token=None, _promise=False):
         objs = [self._deserial(obj) if serialize else obj for obj in objs]
         sizes = sizes or [calc_data_size(obj) for obj in objs]
         shapes = shapes or [getattr(obj, 'shape', None) for obj in objs]
+        extras = extras or [get_extra_meta(obj) for obj in objs]
 
         obj = None
-        succ_keys, succ_objs, succ_sizes, succ_shapes = [], [], [], []
+        succ_keys, succ_objs, succ_sizes, succ_shapes, succ_extras = [], [], [], [], []
         affected_keys = []
         request_size, capacity = 0, 0
         try:
-            for idx, key, obj, size, shape in zip(itertools.count(0), data_keys, objs, sizes, shapes):
+            for idx, key, obj, size, shape, extra in \
+                    zip(itertools.count(0), data_keys, objs, sizes, shapes, extras):
                 try:
                     obj = objs[idx] = self._obj_to_cuda(obj)
                     succ_objs.append(obj)
                     succ_keys.append(key)
                     succ_shapes.append(shape)
                     succ_sizes.append(size)
+                    succ_extras.append(extra)
                 except StorageFull:
                     affected_keys.append(key)
                     request_size += size
@@ -109,7 +113,7 @@ class CudaHandler(StorageHandler, ObjectStorageMixin, SpillableStorageMixin):
 
             self._cuda_store_ref.put_objects(
                 session_id, succ_keys, succ_objs, succ_sizes, pin_token=pin_token)
-            self.register_data(session_id, succ_keys, succ_sizes, succ_shapes)
+            self.register_data(session_id, succ_keys, succ_sizes, succ_shapes, succ_extras)
 
             if affected_keys:
                 raise StorageFull(request_size=request_size, capacity=capacity,

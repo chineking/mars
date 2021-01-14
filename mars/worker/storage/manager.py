@@ -19,19 +19,20 @@ from ..utils import WorkerActor
 
 
 class DataAttrs(object):
-    __slots__ = 'size', 'shape'
+    __slots__ = 'size', 'shape', 'extra'
 
-    def __init__(self, size=None, shape=None):
+    def __init__(self, size=None, shape=None, extra=None):
         self.size = size
         self.shape = shape
+        self.extra = extra
 
     def __reduce__(self):
-        return DataAttrs, (self.size, self.shape)
+        return DataAttrs, (self.size, self.shape, self.extra)
 
     def __repr__(self):  # pragma: no cover
         cls = type(self)
         return f'<{cls.__module__}.{cls.__name__} size={self.size} ' \
-               f'shape={self.shape} at {hex(id(self))}>'
+               f'shape={self.shape} extra={self.extra} at {hex(id(self))}>'
 
 
 class StorageManagerActor(WorkerActor):
@@ -58,9 +59,11 @@ class StorageManagerActor(WorkerActor):
     def get_process_holder(self, proc_id, device):
         return self._proc_holders[(proc_id, device)]
 
-    def register_data(self, session_id, data_keys, location, sizes, shapes=None):
+    def register_data(self, session_id, data_keys, location, sizes,
+                      shapes=None, extras=None):
         shapes = shapes or itertools.repeat(None)
-        for key, size, shape in zip(data_keys, sizes, shapes):
+        extras = extras or itertools.repeat(None)
+        for key, size, shape, extra in zip(data_keys, sizes, shapes, extras):
             session_data_key = (session_id, key)
             try:
                 location_set = self._data_to_locations[session_data_key]
@@ -73,6 +76,8 @@ class StorageManagerActor(WorkerActor):
                 attrs.size = size
                 if shape:
                     attrs.shape = shape
+                if extra:
+                    attrs.extra = extra
             except KeyError:
                 attrs = DataAttrs(size, shape)
             self._data_attrs[session_data_key] = attrs
@@ -102,6 +107,10 @@ class StorageManagerActor(WorkerActor):
 
     def get_data_shapes(self, session_id, data_keys):
         return [a.shape if a is not None else None
+                for a in self.get_data_attrs(session_id, data_keys)]
+
+    def get_data_extra_info(self, session_id, data_keys):
+        return [a.extra if a is not None else None
                 for a in self.get_data_attrs(session_id, data_keys)]
 
     def get_data_attrs(self, session_id, data_keys):

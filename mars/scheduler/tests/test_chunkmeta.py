@@ -17,6 +17,9 @@ import sys
 import unittest
 import uuid
 
+import numpy as np
+import pandas as pd
+
 from mars.actors import new_client
 from mars.scheduler.chunkmeta import WorkerMeta, ChunkMetaStore, ChunkMetaCache, \
     ChunkMetaActor, ChunkMetaClient
@@ -36,20 +39,23 @@ class Test(unittest.TestCase):
         self.assertIsNone(store.get('c1'))
         self.assertSetEqual(store.get_worker_chunk_keys('w0'), {'c0'})
 
-        store['c0'] = WorkerMeta(0, (0,), ('w1',))
+        dtypes = pd.Series([np.dtype(object), np.dtype(np.int32)], index=['a', 'b'])
+        index = pd.RangeIndex(10)
+
+        store['c0'] = WorkerMeta(0, (0,), ('w1',), {'dtypes': dtypes, 'index': index})
         self.assertEqual(store.get_worker_chunk_keys('w0'), set())
         self.assertSetEqual(store.get_worker_chunk_keys('w1'), {'c0'})
 
         del store['c0']
         self.assertNotIn('c0', store)
 
-        store['c1'] = WorkerMeta(1, (1,), ('w0', 'w1'))
+        store['c1'] = WorkerMeta(1, (1,), ('w0', 'w1'), {'index': index})
         store['c2'] = WorkerMeta(2, (2,), ('w1',))
         store['c3'] = WorkerMeta(3, (3,), ('w0',))
         store['c4'] = WorkerMeta(4, (4,), ('w0',))
         affected = store.remove_worker_keys('w0', lambda k: k[-1] < '4')
         self.assertListEqual(affected, ['c3'])
-        self.assertEqual(store.get('c1'), WorkerMeta(1, (1,), ('w1',)))
+        self.assertEqual(store.get('c1'), WorkerMeta(1, (1,), ('w1',), {'index': index}))
         self.assertEqual(store.get('c2'), WorkerMeta(2, (2,), ('w1',)))
         self.assertSetEqual(store.get_worker_chunk_keys('w0'), {'c4'})
         self.assertSetEqual(store.get_worker_chunk_keys('w1'), {'c1', 'c2'})
@@ -93,6 +99,19 @@ class Test(unittest.TestCase):
         self.assertNotIn('c2', dup_cache)
         self.assertIn('c1', dup_cache)
         self.assertTrue(all(f'c{idx}' in dup_cache for idx in range(3, 11)))
+
+    def _compare_extra(self, extra1, extra2):
+        self.assertEqual(list(extra1), list(extra2))
+        for k in extra1:
+            if isinstance(extra1[k], pd.Index):
+                pd.testing.assert_index_equal(extra1[k], extra2[k])
+            else:
+                pd.testing.assert_series_equal(extra1[k], extra2[k])
+
+    def _batch_compare_extra(self, extras1, extras2):
+        self.assertEqual(len(extras1), len(extras2))
+        for extra1, extra2 in zip(extras1, extras2):
+            self._compare_extra(extra1, extra2)
 
     @unittest.skipIf(sys.platform == 'win32', 'Currently not support multiple pools under Windows')
     @patch_method(ChunkMetaClient.get_scheduler)
@@ -156,6 +175,23 @@ class Test(unittest.TestCase):
                 self.assertListEqual(client1.batch_get_chunk_shape(session1, [key1, key2]), [(10,), (10,) * 2])
                 self.assertListEqual(client2.batch_get_chunk_shape(session1, [key1, key2]), [(10,), (10,) * 2])
 
+                dtypes = pd.Series([np.dtype(object), np.dtype(np.int32), np.dtype(np.float64)],
+                                   index=['a', 'b', 'c'])
+                extra1 = {'dtypes': dtypes[:1], 'index': pd.RangeIndex(2)}
+                client1.set_chunk_extra(session1, key1, extra1)
+                extra2 = {'dtypes': dtypes[:2], 'index': pd.RangeIndex(4)}
+                client2.set_chunk_extra(session1, key2, extra2)
+                extra3 = {'dtypes': dtypes, 'index': pd.RangeIndex(6)}
+                client2.set_chunk_extra(session2, key3, extra3)
+
+                self._compare_extra(client1.get_chunk_extra(session1, key1), extra1)
+                self._compare_extra(client2.get_chunk_extra(session1, key2), extra2)
+                self._compare_extra(client1.get_chunk_extra(session1, key2), extra2)
+                self._compare_extra(client2.get_chunk_extra(session1, key1), extra1)
+
+                self._batch_compare_extra(client1.batch_get_chunk_extra(session1, [key1, key2]), [extra1, extra2])
+                self._batch_compare_extra(client2.batch_get_chunk_extra(session1, [key1, key2]), [extra1, extra2])
+
                 mock_endpoint = f'127.0.0.1:{get_next_port()}'
                 with create_actor_pool(n_process=1, backend='gevent', address=mock_endpoint) as pool3:
                     cluster_info3 = pool3.create_actor(SchedulerClusterInfoActor, endpoints,
@@ -193,10 +229,13 @@ class Test(unittest.TestCase):
                 self.assertIsNone(client1.batch_get_chunk_size(session1, [key1, key2])[1])
                 self.assertIsNone(client1.batch_get_workers(session1, [key1, key2])[1])
 
-                meta4 = WorkerMeta(chunk_size=512, chunk_shape=(10,) * 2, workers=(endpoints[0],))
+                meta4 = WorkerMeta(chunk_size=512, chunk_shape=(10,) * 2, workers=(endpoints[0],),
+                                   extra={'index': pd.RangeIndex(10)})
                 loc_ref2.batch_set_chunk_meta(session1, [key4], [meta4])
                 self.assertEqual(loc_ref2.get_chunk_meta(session1, key4).chunk_size, 512)
                 self.assertEqual(loc_ref2.get_chunk_meta(session1, key4).chunk_shape, (10,) * 2)
+                self._compare_extra(loc_ref2.get_chunk_meta(session1, key4).extra,
+                                    {'index': pd.RangeIndex(10)})
 
                 meta5 = WorkerMeta(chunk_size=512, chunk_shape=(10,) * 2, workers=(endpoints[0],))
                 meta6 = WorkerMeta(chunk_size=512, chunk_shape=(10,) * 2, workers=(endpoints[0],))
@@ -238,21 +277,30 @@ class Test(unittest.TestCase):
                 key3 = str(uuid.uuid4())
                 keys = [key1, key2, key3]
 
+                dtypes = pd.Series([np.dtype(object), np.dtype(np.int32), np.dtype(np.float64)],
+                                   index=['a', 'b', 'c'])
+                extra1 = {'dtypes': dtypes[:1], 'index': pd.RangeIndex(2)}
+                extra2 = {'dtypes': dtypes[:2], 'index': pd.RangeIndex(4)}
+
                 client1.set_chunk_broadcasts(session_id, key1, [endpoints[1]])
                 client1.set_chunk_size(session_id, key1, 512)
                 client1.set_chunk_shape(session_id, key1, (10,) * 2)
+                client1.set_chunk_extra(session_id, key1, extra1)
                 client1.add_worker(session_id, key1, 'abc')
                 client2.set_chunk_broadcasts(session_id, key2, [endpoints[0]])
                 client2.set_chunk_size(session_id, key2, 512)
                 client1.set_chunk_shape(session_id, key2, (10,) * 2)
                 client2.add_worker(session_id, key2, 'def')
+                client2.set_chunk_extra(session_id, key2, extra2)
                 pool2.sleep(0.1)
 
                 self.assertEqual(local_ref1.get_chunk_meta(session_id, key1).chunk_size, 512)
                 self.assertEqual(local_ref1.get_chunk_meta(session_id, key1).chunk_shape, (10,) * 2)
+                self._compare_extra(local_ref1.get_chunk_meta(session_id, key1).extra, extra1)
                 self.assertEqual(local_ref1.get_chunk_broadcasts(session_id, key1), [endpoints[1]])
                 self.assertEqual(local_ref2.get_chunk_meta(session_id, key1).chunk_size, 512)
                 self.assertEqual(local_ref2.get_chunk_meta(session_id, key1).chunk_shape, (10,) * 2)
+                self._compare_extra(local_ref2.get_chunk_meta(session_id, key1).extra, extra1)
                 self.assertEqual(local_ref2.get_chunk_broadcasts(session_id, key2), [endpoints[0]])
 
                 client1.batch_set_chunk_broadcasts(session_id, [key3], [[endpoints[1]]])

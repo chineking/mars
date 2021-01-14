@@ -51,7 +51,7 @@ class DataStorageDevice(Enum):
             return proc_id, self
 
 
-class BytesStorageIO(object):
+class BytesStorageIO:
     storage_type = None
 
     def __init__(self, session_id, data_key, mode='w', handler=None, **kwargs):
@@ -90,10 +90,11 @@ class BytesStorageIO(object):
     def get_io_pool(self, pool_name=None):
         return self._handler.get_io_pool(pool_name)
 
-    def register(self, size, shape=None):
+    def register(self, size, shape=None, extra=None):
         location = self.storage_type.build_location(self._storage_ctx.proc_id)
         self._storage_ctx.manager_ref \
-            .register_data(self._session_id, [self._data_key], location, [size], shapes=[shape])
+            .register_data(self._session_id, [self._data_key], location, [size],
+                           shapes=[shape], extra=extra)
 
     def close(self, finished=True):
         self._closed = True
@@ -109,7 +110,7 @@ class BytesStorageIO(object):
         raise NotImplementedError
 
 
-class StorageHandler(object):
+class StorageHandler:
     storage_type = None
 
     def __init__(self, storage_ctx, proc_id=None):
@@ -197,9 +198,10 @@ class StorageHandler(object):
     def load_from_object_io(self, session_id, data_keys, src_handler, pin_token=None):
         raise NotImplementedError
 
-    def register_data(self, session_id, data_keys, sizes, shapes=None):
+    def register_data(self, session_id, data_keys, sizes, shapes=None, extras=None):
         self._storage_ctx.manager_ref \
-            .register_data(session_id, data_keys, self.location, sizes, shapes=shapes)
+            .register_data(session_id, data_keys, self.location, sizes,
+                           shapes=shapes, extras=extras)
 
     def _dispatch_keys_to_uids(self, session_id, data_keys):
         uid_to_keys = defaultdict(list)
@@ -256,7 +258,7 @@ class StorageHandler(object):
             .unregister_data(session_id, data_keys, self.location, _tell=_tell)
 
 
-class BytesStorageMixin(object):
+class BytesStorageMixin:
     _has_bytes_io = True
 
     def create_bytes_reader(self, session_id, data_key, packed=False, packed_compression=None,
@@ -319,7 +321,7 @@ class BytesStorageMixin(object):
             del serialized_obj
 
 
-class ObjectStorageMixin(object):
+class ObjectStorageMixin:
     _has_object_io = True
 
     @staticmethod
@@ -376,12 +378,13 @@ class ObjectStorageMixin(object):
     def get_objects(self, session_id, data_keys, serialize=False, _promise=False):
         raise NotImplementedError
 
-    def put_objects(self, session_id, data_keys, objs, sizes=None, shapes=None,
+    def put_objects(self, session_id, data_keys, objs,
+                    sizes=None, shapes=None, extras=None,
                     serialize=False, pin_token=False, _promise=False):
         raise NotImplementedError
 
 
-class SpillableStorageMixin(object):
+class SpillableStorageMixin:
     _spillable = True
 
     def spill_size(self, size, multiplier=1):

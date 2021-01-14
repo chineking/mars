@@ -18,6 +18,7 @@ from ... import promise
 from ...config import options
 from ...errors import StorageFull, StorageDataExists
 from ...serialize import dataserializer
+from ...utils import get_extra_meta
 from ..dataio import ArrowBufferIO
 from .core import StorageHandler, BytesStorageMixin, ObjectStorageMixin, \
     SpillableStorageMixin, BytesStorageIO, DataStorageDevice, wrap_promised, \
@@ -141,22 +142,25 @@ class SharedStorageHandler(StorageHandler, BytesStorageMixin, ObjectStorageMixin
             return [self._shared_store.get(session_id, k) for k in data_keys]
 
     @wrap_promised
-    def put_objects(self, session_id, data_keys, objs, sizes=None, shapes=None,
+    def put_objects(self, session_id, data_keys, objs,
+                    sizes=None, shapes=None, extras=None,
                     serialize=False, pin_token=None, _promise=False):
-        succ_keys, succ_shapes = [], []
+        succ_keys, succ_shapes, succ_extras = [], [], []
         affected_keys = []
         request_size, capacity = 0, 0
 
         objs = [self._deserial(obj) if serialize else obj for obj in objs]
         shapes = shapes or [getattr(obj, 'shape', None) for obj in objs]
+        extras = extras or [get_extra_meta(obj) for obj in objs]
         obj_refs = []
         obj = None
         try:
-            for key, obj, shape in zip(data_keys, objs, shapes):
+            for key, obj, shape, extra in zip(data_keys, objs, shapes, extras):
                 try:
                     obj_refs.append(self._shared_store.put(session_id, key, obj))
                     succ_keys.append(key)
                     succ_shapes.append(shape)
+                    succ_extras.append(extra)
                 except StorageFull as ex:
                     affected_keys.extend(ex.affected_keys)
                     request_size += ex.request_size
@@ -165,9 +169,12 @@ class SharedStorageHandler(StorageHandler, BytesStorageMixin, ObjectStorageMixin
                     if self.location in self.storage_ctx.get_data_locations(session_id, [key])[0]:
                         succ_keys.append(key)
                         succ_shapes.append(shape)
+                        succ_extras.append(extra)
                     else:
                         raise
-            self._holder_ref.put_objects_by_keys(session_id, succ_keys, shapes=succ_shapes, pin_token=pin_token)
+            self._holder_ref.put_objects_by_keys(session_id, succ_keys,
+                                                 shapes=succ_shapes, extras=succ_extras,
+                                                 pin_token=pin_token)
             if affected_keys:
                 raise StorageFull(request_size=request_size, capacity=capacity,
                                   affected_keys=affected_keys)

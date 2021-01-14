@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from ...serialize import dataserializer
-from ...utils import calc_data_size
+from ...utils import calc_data_size, get_extra_meta
 from .core import DataStorageDevice, StorageHandler, ObjectStorageMixin, \
     wrap_promised, register_storage_handler_cls
 
@@ -41,15 +41,17 @@ class ProcMemHandler(StorageHandler, ObjectStorageMixin):
         return objs
 
     @wrap_promised
-    def put_objects(self, session_id, data_keys, objs, sizes=None, shapes=None,
+    def put_objects(self, session_id, data_keys, objs,
+                    sizes=None, shapes=None, extras=None,
                     serialize=False, pin_token=None, _promise=False):
         objs = [self._deserial(obj) if serialize else obj for obj in objs]
         obj = None
         try:
             sizes = sizes or [calc_data_size(obj) for obj in objs]
             shapes = shapes or [getattr(obj, 'shape', None) for obj in objs]
+            extras = extras or [get_extra_meta(obj) for obj in objs]
             self._inproc_store_ref.put_objects(session_id, data_keys, objs, sizes, pin_token=pin_token)
-            self.register_data(session_id, data_keys, sizes, shapes)
+            self.register_data(session_id, data_keys, sizes, shapes, extras)
         finally:
             objs[:] = []
             del obj

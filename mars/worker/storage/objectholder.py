@@ -311,7 +311,8 @@ class SharedHolderActor(ObjectHolderActor):
         self._shared_store.batch_delete(session_id, data_keys)
         self._storage_handler.unregister_data(session_id, data_keys)
 
-    def put_objects_by_keys(self, session_id, data_keys, shapes=None, pin_token=None):
+    def put_objects_by_keys(self, session_id, data_keys, shapes=None,
+                            extras=None, pin_token=None):
         sizes = []
         for data_key in data_keys:
             buf = None
@@ -327,7 +328,8 @@ class SharedHolderActor(ObjectHolderActor):
 
         self._finish_put_objects(session_id, data_keys)
         self.storage_client.register_data(
-            session_id, data_keys, (0, self._storage_device), sizes, shapes=shapes)
+            session_id, data_keys, (0, self._storage_device), sizes,
+            shapes=shapes, extras=extras)
 
 
 class InProcHolderActor(SimpleObjectHolderActor):

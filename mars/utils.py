@@ -347,6 +347,63 @@ def calc_data_size(dt, shape=None):
     return sys.getsizeof(dt)
 
 
+def get_extra_meta(obj):
+    dataframe_types = [pd.DataFrame]
+    series_types = [pd.Series]
+    index_types = [pd.Index]
+    range_index_types = [pd.RangeIndex]
+    ndarray_types = [np.ndarray]
+
+    try:
+        import cupy
+
+        ndarray_types.append(cupy.ndarray)
+    except ImportError:
+        pass
+
+    try:
+        import cudf
+
+        dataframe_types.append(cudf.DataFrame)
+        series_types.append(cudf.Series)
+        index_types.append(cudf.Index)
+        range_index_types.append(cudf.RangeIndex)
+    except ImportError:
+        pass
+
+    def _get_index(ind):
+        if not isinstance(ind, tuple(range_index_types)):
+            ind = ind[:0]
+        return ind.to_pandas() if hasattr(index, 'to_pandas') else ind
+
+    # get extra meta information
+    if isinstance(obj, tuple(dataframe_types)):
+        index = _get_index(obj.index)
+        return {
+            'dtypes': obj.dtypes,
+            'index': index
+        }
+    elif isinstance(obj, tuple(series_types)):
+        index = _get_index(obj.index)
+        return {
+            'dtype': obj.dtype,
+            'index': index,
+            'name': obj.name
+        }
+    elif isinstance(obj, tuple(index_types)):
+        index = _get_index(obj)
+        return {
+            'index': index
+        }
+    elif isinstance(obj, tuple(ndarray_types)):
+        return {
+            'dtype': obj.dtype,
+            'order': obj.order
+        }
+    else:
+        return
+
+
 def get_shuffle_input_keys_idxes(chunk):
     from .operands import ShuffleProxy
 
